@@ -9,7 +9,7 @@ import pandas as pd
 from tqdm import tqdm
 from pprint import pprint
 from pathlib import Path
-from utils.bot import BaseBot
+from utils.bot import BaseBot, ValueBuffer
 from utils.project import Global as G
 from utils.project import ArgParser as A
 import xgboost as xgb
@@ -61,36 +61,37 @@ class GLRBot(BaseBot):
         '''
         override if needed for different metrics
         '''
-        gap, x = self.GAP_vector(preds.data.cpu().numpy(),
-                confs.data.cpu().numpy(),
-                targets.data.cpu().numpy(),
-                return_x=True)
+        gap, x = self.GAP_vector(preds, confs, targets, return_x=True)
         return gap
 
     def eval(self, loader):
         self.model.eval()
-        losses, weights = [], []
         confs, preds, y_global = [], [], []
+        self.eval_am.reset()
+        confs = ValueBuffer()
+        preds = ValueBuffer()
+        targs = ValueBuffer()
+
         self.logger.info("start eval, plz wait...")
+
         with torch.set_grad_enabled(False):
             for *input_tensors, y_local in tqdm(loader):
                 output = self.eval_one_step(input_tensors, y_local)
                 outputs_softmax = nn.functional.softmax(output,dim=1)
                 conf, pred = torch.max(outputs_softmax, 1)
-                confs.append(conf)
-                preds.append(pred)
-                y_global.append(y_local)
+                confs.concat(conf.data.cpu().numpy().astype(np.float16))
+                preds.concat(pred.data.cpu().numpy().astype(np.int32))
+                targs.concat(y_local.data.cpu().numpy().astype(np.int32))
 
-        loss = np.average(self.eval_losses, weights=self.eval_weights)
+        loss = self.eval_am.avg
         loss_str = self.loss_format % loss
         self.logger.info("val loss %s", loss_str)
         self.logger.tb_scalars(
             "losses", {"val": loss},  self.step)
 
-        confs = torch.cat(confs, dim=0)
-        preds = torch.cat(preds, dim=0)
-        y_global = torch.cat(y_global, dim=0)
-        score = self.metrics(preds, confs, y_global)
+        score = self.metrics(preds.ndarray(),
+                confs.ndarray(),
+                targs.ndarray())
         self.logger.info("val gap %s", score)
         self.logger.tb_scalars(
             "gap", {"val": score},  self.step)
@@ -102,34 +103,32 @@ class GLRBot(BaseBot):
         test set has label which can be used to investigate manually
         '''
         self.model.eval()
-        eval_losses = []
-        eval_weights = []
-        confs, preds, y_global = [], [], []
+        # reuse eval loss meter
+        self.eval_am.reset()
+        confs = ValueBuffer()
+        preds = ValueBuffer()
+        targs = ValueBuffer()
         self.logger.info("start predict, plz wait...")
+
         with torch.set_grad_enabled(False):
             for *input_tensors, y_local in tqdm(loader):
                 input_tensors = [x.to(self.device) for x in input_tensors]
                 output = self.predict_batch(input_tensors)
                 outputs_softmax = nn.functional.softmax(output,dim=1)
                 conf, pred = torch.max(outputs_softmax, 1)
-                confs.append(conf.data.cpu().numpy().astype(np.int32))
-                preds.append(pred.data.cpu().numpy().astype(np.float16))
+                confs.concat(conf.data.cpu().numpy().astype(np.int32))
+                preds.concat(pred.data.cpu().numpy().astype(np.float16))
+
                 if return_y:
                     batch_loss = self.criterion(
                         self.extract_prediction(output), y_local.to(self.device))
-                    eval_losses.append(batch_loss.data.cpu().numpy())
-                    eval_weights.append(y_local.size(self.batch_idx))
-                    y_global.append(y_local.cpu());
-            confs = np.array(confs)
-            preds = np.array(preds)
-            # confs = torch.cat(confs, dim=0)
-            # preds = torch.cat(preds, dim=0)
-            if return_y:
-                y_global = torch.cat(y_global, dim=0)
-                loss = np.average(eval_losses, weights=eval_weights)
+                    self.eval_am.append(batch_loss.data.cpu().numpy(), y_local.size(self.batch_idx))
+                    targs.concat(y_local.data.cpu().numpy().astype(np.int32))
+
         if return_y:
-            return preds, confs, y_global, loss
-        return preds, confs
+            loss = self.eval_am.avg
+            return preds.ndarray(), confs.ndarray(), targs.ndarray(), loss
+        return pred.ndarray(), conf.ndarray()
 
 
 

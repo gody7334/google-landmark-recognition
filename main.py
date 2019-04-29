@@ -77,8 +77,13 @@ def run_gap():
 
 
 def run_base():
-    train_csv = '/home/gody7334/google-landmark/input/train.csv' \
-            if A.dev_exp=='EXP' else '/home/gody7334/google-landmark/input/train_dev.csv'
+    if A.dev_exp=='EXP':
+        train_csv = '/home/gody7334/google-landmark/input/train.csv'
+    elif A.dev_exp=='DEV':
+        train_csv = '/home/gody7334/google-landmark/input/train_dev.csv'
+    elif A.dev_exp=='DEVL':
+        train_csv = '/home/gody7334/google-landmark/input/train_exp.csv'
+
     pl = BasePipeline(train_csv,
             files_path='/home/gody7334/google-landmark/input/trn-256')
     pl.init_pipeline()

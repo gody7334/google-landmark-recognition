@@ -10,7 +10,7 @@ class cnn_model(torch.nn.Module):
             cnn_type='resnet18'):
         super(cnn_model, self).__init__()
 
-        self.model = resnet101(pretrained=True)
+        self.model = resnet50(pretrained=True)
 
         # modify model head
         self.model.avgpool = nn.AdaptiveAvgPool2d((1, 1))

@@ -33,7 +33,9 @@ def base_collate(batch):
 
 class BaseDataset(Dataset):
 
-    def __init__(self, df, files_path, w=256, h=256, mode='train', labeled=True):
+    def __init__(self, df, files_path, w=256, h=256,
+            mode='train', labeled=True, random_state=0,
+            resample=False,resample_frac=0.1):
         self.df = df
         self.files_path = files_path
         self.w = w
@@ -41,6 +43,11 @@ class BaseDataset(Dataset):
         self.mode = mode
         self.labeled = labeled
         self.augmentor = self.augment_pipe()
+        self.random_state=random_state
+        self.resample_frac = resample_frac
+
+        if resample:
+            self.resample_df(frac=self.resample_frac)
 
     def __len__(self):
         return len(self.df)
@@ -66,6 +73,20 @@ class BaseDataset(Dataset):
         if self.labeled:
             return img, label
         return img
+
+    def resample_df(self, up_count=100, low_count=10,frac=0.1):
+        img_count = self.df.landmark_id.value_counts()
+        img_count.name = 'img_count'
+        self.df = self.df.join(img_count, on='landmark_id')
+        img_count = self.df['img_count'].values
+        weight = np.log(img_count+1)/np.log(1.05)
+        # weight = ((img_count>up_count)*up_count) + \
+                # ((img_count<low_count)*0) + \
+                # (((img_count<=up_count)*(img_count>=low_count))*img_count)
+        self.df = self.df.sample(frac=frac, weights=weight.squeeze(), random_state=self.random_state)
+        self.df = self.df.reset_index(drop=True)
+
+
 
     def augment_pipe(self):
         augmentor = iaa.Sequential(
@@ -121,10 +142,22 @@ class BaseDataLoader():
         self.update_batch_size(train_size,val_size,test_size)
 
     # override for different dataset needed
-    def get_dataset(self,):
-        self.train_ds = BaseDataset(self.df_train, self.files_path, mode='train')
-        self.val_ds = BaseDataset(self.df_val, self.files_path, mode='val')
-        self.test_ds = BaseDataset(self.df_test, self.files_path, mode='test')
+    def get_dataset(self, random_state=0):
+        self.train_ds = BaseDataset(self.df_train,
+                self.files_path,
+                mode='train',
+                random_state=random_state,
+                resample=True)
+        self.val_ds = BaseDataset(self.df_val,
+                self.files_path,
+                mode='val',
+                random_state=random_state,
+                resample=True)
+        self.test_ds = BaseDataset(self.df_test,
+                self.files_path,
+                mode='test',
+                random_state=random_state,
+                resample=True)
 
     def set_submission_dataloader(self, df_submission):
         self.df_submission = df_submission

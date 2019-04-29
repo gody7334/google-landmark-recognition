@@ -145,6 +145,26 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+# evaluate meters
+class ValueBuffer(object):
+    """stores values into buffer for later computation"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.vals = []
+
+    def concat(self, val):
+        self.vals = np.concatenate((self.vals,val), axis=None)
+
+    def append(self, val):
+        self.vals.append(val)
+
+    def ndarray(self):
+        return np.array(self.vals)
+
+
 class BaseBot:
     """
     Base Interface to Model Training and Inference
@@ -263,8 +283,6 @@ class BaseBot:
         batch_loss = self.criterion(
             self.extract_prediction(output), y_local.to(self.device))
         self.eval_am.append(batch_loss.data.cpu().numpy(), y_local.size(self.batch_idx))
-        self.eval_losses.append(batch_loss.data.cpu().numpy())
-        self.eval_weights.append(y_local.size(self.batch_idx))
         return output
 
     def snapshot(self, loss, rule='min'):
@@ -411,11 +429,13 @@ class BaseBot:
     def eval(self, loader):
         self.model.eval()
         losses, weights = [], []
+        self.eval_am.reset()
         self.logger.info("start eval, plz wait...")
+
         with torch.set_grad_enabled(False):
             for *input_tensors, y_local in tqdm(loader):
                 self.eval_one_step(input_tensors, y_local)
-        loss = np.average(self.eval_losses, weights=self.eval_weights)
+        loss = self.eval_am.avg
         loss_str = self.loss_format % loss
         self.logger.info("Snapshot loss %s", loss_str)
         self.logger.tb_scalars(

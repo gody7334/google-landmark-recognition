@@ -26,7 +26,7 @@ from utils.model import *
 
 
 class BasePipeline:
-    def __init__(self, train_csv, test_csv='', files_path=''):
+    def __init__(self, train_csv, test_csv='', files_path='', random_state=2019):
         self.train_csv = train_csv
         self.test_csv = test_csv
         self.files_path = files_path
@@ -34,6 +34,7 @@ class BasePipeline:
         self.val_df = None
         self.holdout_df = None
         self.sample_sub = None
+        self.random_state=random_state
 
     def init_pipeline(self):
         G.logger.info("cv split")
@@ -75,13 +76,16 @@ class BasePipeline:
         self.stage_params = PipelineParams(self.model).simple()
 
     def do_cv_split(self):
+        G.logger.info(f"random state: {self.random_state}")
+
+        # TODO too slow....
         file_part = [os.path.basename(x).replace('.jpg','') \
                 for x in glob.glob(os.path.join(self.files_path,'*.jpg'))]
         df_all = pd.read_csv(self.train_csv)
         df_part = df_all[df_all['id'].isin(file_part)]
 
-        df_train, df_val = train_test_split(df_part, test_size=0.05)
-        df_val, df_test = train_test_split(df_val, test_size=0.5)
+        df_train, df_val = train_test_split(df_part, test_size=0.5,random_state=self.random_state)
+        df_val, df_test = train_test_split(df_val, test_size=0.5,random_state=self.random_state)
 
         self.train_df = df_train.reset_index(drop=True)
         self.val_df = df_val.reset_index(drop=True)
@@ -95,6 +99,9 @@ class BasePipeline:
             G.logger.info("Start stage %s", str(stage))
 
             if params['batch_size'] is not None:
+                # update dataset df for resample dataset
+                self.dl.get_dataset(random_state=stage)
+                # update dataloader for new dataset
                 self.dl.update_batch_size(
                         train_size=params['batch_size'][0],
                         val_size=params['batch_size'][1],
@@ -152,21 +159,33 @@ class PipelineParams():
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
-                    'epoch': 5 if A.dev_exp=="EXP" else 1,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
             ]*1,
             [
                 {
-                    'optimizer': Adam(self.model.parameters(),lr=1e-4,weight_decay=1e-4),
-                    'batch_size': [20,128,128],
+                    'optimizer': Adam(self.model.parameters(),lr=1e-3,weight_decay=1e-4),
+                    'batch_size': [16,128,128],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model.model, nn.Module)],
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
-                    'epoch': 20 if A.dev_exp=="EXP" else 1,
+                    'epoch': 5 if A.dev_exp=="EXP" else 1,
                 }
-            ]*3,
+            ]*2,
+            [
+                {
+                    'optimizer': Adam(self.model.parameters(),lr=1e-4,weight_decay=1e-4),
+                    'batch_size': [16,128,128],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 5 if A.dev_exp=="EXP" else 1,
+                }
+            ]*2
         ]
         self.params = [j for sub in self.params for j in sub]
         return self.params

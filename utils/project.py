@@ -33,7 +33,7 @@ class ArgParser():
         ap.add_argument("-v","--version", default='000_BASELINE',
                 help="version label")
         ap.add_argument("-de","--dev_exp", default='EXP',
-                choices=['DEV', 'EXP'],
+                choices=['DEV', 'DEVL', 'EXP'],
                 help="development or experimenet mode")
         ap.add_argument("-m","--mode", default='train',
                 choices=['train','ensemble_eval','ensemble_pred','blending_pred'],
