@@ -14,7 +14,7 @@ PROJECT_BACKUP_FOLDER = '/home/gody7334/project/google-landmark/result'
 IDENTIFIER   = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 class ArgParser():
-    gpu_id = '0'
+    gpu_id = '0,1'
     version = '000_BASELINE'
     dev_exp = 'EXP'
     mode = 'train'
@@ -29,7 +29,7 @@ class ArgParser():
 
     def __init__(self):
         ap = argparse.ArgumentParser()
-        ap.add_argument("-g", "--gpu_id", default='0', type=str, help="gpu id")
+        ap.add_argument("-g", "--gpu_id", default='0,1', type=str, help="gpu id")
         ap.add_argument("-v","--version", default='000_BASELINE',
                 help="version label")
         ap.add_argument("-de","--dev_exp", default='EXP',

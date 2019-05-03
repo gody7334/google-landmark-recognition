@@ -22,11 +22,12 @@ from utils.lr_scheduler import TriangularLR
 from utils.bot import *
 from dev.glr_bot import *
 from utils.data import *
+from dev.data import GLRDataLoader
 from utils.model import *
 
 
 class BasePipeline:
-    def __init__(self, train_csv, test_csv='', files_path='', random_state=2019):
+    def __init__(self, train_csv, test_csv='', files_path='', random_state=2019, split_ratio=[0.8,0.1,0.1]):
         self.train_csv = train_csv
         self.test_csv = test_csv
         self.files_path = files_path
@@ -35,20 +36,23 @@ class BasePipeline:
         self.holdout_df = None
         self.sample_sub = None
         self.random_state=random_state
+        self.split_ratio=split_ratio
 
     def init_pipeline(self):
         G.logger.info("cv split")
         self.do_cv_split()
 
         G.logger.info("load model")
-        self.model = cnn_model(num_class=203094)
+        self.model=None
+        self.init_model()
 
         G.logger.info("load data loader")
-        self.dl=BaseDataLoader(self.train_df,
+        self.dl=GLRDataLoader(self.train_df,
                 self.val_df,
                 self.holdout_df,
                 None,
-                files_path=self.files_path)
+                files_path=self.files_path,
+                split_ratio=self.split_ratio)
 
         G.logger.info("create bot")
         self.bot = GLRBot(
@@ -73,19 +77,33 @@ class BasePipeline:
         self.oc.update_bot(pretrained_path=path, continue_step=continue_step, n_step=0)
 
         G.logger.info("load cycle train pipeline params")
+        self.stage_params=None
+        self.init_pipeline_params()
+
+
+    def init_model(self):
+        self.model = BaseResNet(resnet_type='resnet18',num_classes=203094)
+
+    def init_pipeline_params(self):
         self.stage_params = PipelineParams(self.model).simple()
 
     def do_cv_split(self):
         G.logger.info(f"random state: {self.random_state}")
 
-        # TODO too slow....
-        file_part = [os.path.basename(x).replace('.jpg','') \
+        if os.path.isfile('/home/gody7334/google-landmark/input/files_list.npy'):
+            file_part = np.load('/home/gody7334/google-landmark/input/files_list.npy')
+        else:
+            file_part = [os.path.basename(x).replace('.jpg','') \
                 for x in glob.glob(os.path.join(self.files_path,'*.jpg'))]
+            np.save('/home/gody7334/google-landmark/input/files_list.npy', file_part)
+
         df_all = pd.read_csv(self.train_csv)
         df_part = df_all[df_all['id'].isin(file_part)]
 
-        df_train, df_val = train_test_split(df_part, test_size=0.5,random_state=self.random_state)
-        df_val, df_test = train_test_split(df_val, test_size=0.5,random_state=self.random_state)
+        train_size=self.split_ratio[0]
+        test_size=self.split_ratio[2]/(self.split_ratio[1]+self.split_ratio[2])
+        df_train, df_val = train_test_split(df_part, train_size=train_size, random_state=self.random_state)
+        df_val, df_test = train_test_split(df_val, test_size=test_size,random_state=self.random_state)
 
         self.train_df = df_train.reset_index(drop=True)
         self.val_df = df_val.reset_index(drop=True)
@@ -98,9 +116,9 @@ class BasePipeline:
             params = self.stage_params[stage]
             G.logger.info("Start stage %s", str(stage))
 
+            frac=0.1 if A.dev_exp=='EXP' else 1.0
+
             if params['batch_size'] is not None:
-                # update dataset df for resample dataset
-                self.dl.get_dataset(random_state=stage)
                 # update dataloader for new dataset
                 self.dl.update_batch_size(
                         train_size=params['batch_size'][0],
@@ -133,9 +151,12 @@ class BasePipeline:
         G.logger.info("holdout validation loss: %.6f", loss)
         G.logger.tb_scalars("losses", {"Holdout": loss}, self.bot.step)
 
-        score = self.bot.metrics(preds, confs, targets)
-        G.logger.info("holdout gap: %.6f", score)
-        G.logger.tb_scalars("gap", {"Holdout": score}, self.bot.step)
+        score, accu = self.bot.metrics(preds, confs, targets)
+        G.logger.info("holdout, gap: %.6f, accu: %.6f", score, accu)
+        G.logger.tb_scalars(
+            "gap", {"holdout": score},  self.bot.step)
+        G.logger.tb_scalars(
+            "accu", {"holdout": accu},  self.bot.step)
 
 
 class PipelineParams():
@@ -171,9 +192,9 @@ class PipelineParams():
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
-                    'epoch': 5 if A.dev_exp=="EXP" else 1,
+                    'epoch': 2 if A.dev_exp=="EXP" else 1,
                 }
-            ]*2,
+            ]*5,
             [
                 {
                     'optimizer': Adam(self.model.parameters(),lr=1e-4,weight_decay=1e-4),
@@ -183,9 +204,9 @@ class PipelineParams():
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
-                    'epoch': 5 if A.dev_exp=="EXP" else 1,
+                    'epoch': 2 if A.dev_exp=="EXP" else 1,
                 }
-            ]*2
+            ]*5
         ]
         self.params = [j for sub in self.params for j in sub]
         return self.params

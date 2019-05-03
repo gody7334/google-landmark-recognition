@@ -38,6 +38,7 @@ from utils.lr_scheduler import TriangularLR
 
 from utils.bot import *
 from dev.glr_bot import *
+from dev.glr_pipeline import GLRPipeline
 from utils.data import *
 from utils.model import *
 from utils.pipeline import *
@@ -84,7 +85,7 @@ def run_base():
     elif A.dev_exp=='DEVL':
         train_csv = '/home/gody7334/google-landmark/input/train_exp.csv'
 
-    pl = BasePipeline(train_csv,
+    pl = GLRPipeline(train_csv,
             files_path='/home/gody7334/google-landmark/input/trn-256')
     pl.init_pipeline()
     pl.do_cycles_train()

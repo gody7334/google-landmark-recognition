@@ -193,6 +193,7 @@ class BaseBot:
         assert train_loader is not None
         assert val_loader is not None
         self.model = model.to(device)
+        # self.model = model
         self.optimizer = optimizer
         self.criterion = criterion
         self.train_loader = train_loader
@@ -326,7 +327,6 @@ class BaseBot:
             if len(c) > 0:
                 for l in c:
                     apply_leaf(l, f)
-
         for g, mod in l:
             module = mod
             apply_leaf(g, lambda m: set_trainable_attr(m, b))
@@ -391,11 +391,11 @@ class BaseBot:
                     local_step += 1
 
                     # train log
-                    if self.step % log_interval == 0:
+                    if local_step % log_interval == 0:
                         self.log_progress()
 
                     # eval
-                    if self.step % eval_interval == 0:
+                    if local_step % eval_interval == 0 and local_step < n_steps-1:
                         loss = self.eval(self.val_loader)
 
                         if self.snapshot_policy is 'validate' or \
