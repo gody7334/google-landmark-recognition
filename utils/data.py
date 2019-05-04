@@ -101,7 +101,8 @@ class BaseDataLoader():
             files_path='',
             train_size=20,
             val_size=128,
-            test_size=128):
+            test_size=128,
+            collate_fn=base_collate):
 
         self.df_train = df_train
         self.df_val = df_val
@@ -109,6 +110,7 @@ class BaseDataLoader():
         self.sample_sub = sample_sub
         self.files_path = files_path
         self.df_submission = None
+        self.collate_fn = collate_fn
 
         self.train_ds = None
         self.val_ds = None
@@ -159,7 +161,7 @@ class BaseDataLoader():
     def get_dataloader(self):
         self.train_loader = DataLoader(
             self.train_ds,
-            collate_fn = base_collate,
+            collate_fn = self.collate_fn,
             batch_size=self.train_size,
             num_workers=4,
             pin_memory=True,
@@ -168,7 +170,7 @@ class BaseDataLoader():
         )
         self.val_loader = DataLoader(
             self.val_ds,
-            collate_fn = base_collate,
+            collate_fn = self.collate_fn,
             batch_size=self.val_size,
             num_workers=4,
             pin_memory=True,
@@ -176,7 +178,7 @@ class BaseDataLoader():
         )
         self.test_loader = DataLoader(
             self.test_ds,
-            collate_fn = base_collate,
+            collate_fn = self.collate_fn,
             batch_size=self.test_size,
             num_workers=4,
             pin_memory=True,

@@ -51,7 +51,7 @@ class GLRPipeline(BasePipeline):
             params = self.stage_params[stage]
             G.logger.info("Start stage %s", str(stage))
 
-            frac=0.1 if A.dev_exp=='EXP' else 1.0
+            if A.dev_exp=='DEV': frac=1.0
 
             if params['batch_size'] is not None:
                 self.dl.get_dataset()
@@ -101,7 +101,7 @@ class GLRPipelineParams():
                          {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},],
                         weight_decay=1e-4),
                     'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
-                    'batch_size': [16,64,64],
+                    'batch_size': [4,64,64],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
@@ -115,8 +115,8 @@ class GLRPipelineParams():
                     'optimizer': Adam(
                         [{'params':self.model.feat1.parameters(),'lr':1e-4},
                          {'params':self.model.feat2.parameters(),'lr':1e-4},
-                         {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
-                         {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5}],
+                         {'params':self.model.com_bi_pool.parameters(),'lr':5e-4},
+                         {'params':self.model.fc.parameters(),'lr':5e-4, 'eps':1e-5}],
                         weight_decay=1e-4),
                     'resample': [1000,20,0.2], # uppser_count, lower_count, fraction
                     'batch_size': [16,64,64],
