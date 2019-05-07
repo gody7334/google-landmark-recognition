@@ -48,9 +48,9 @@ class OneCycle:
 
     def update_bot(self,
         train_loader=None, val_loader=None,
-        optimizer=None, criterion=None, scheduler=None,
+        optimizer=None, optimizer_init=None, criterion=None,
         unfreeze_layers=[], freeze_layers=[], dropout_ratio=[],
-        pretrained_path='', continue_step=0,
+        pretrained_path='', continue_step=0, scheduler=None,
         lrs=[], n_epoch=None, n_step=None, stage='',
         accu_gradient_step=None, log_interval=100):
 
@@ -70,14 +70,8 @@ class OneCycle:
 
         if train_loader is not None: self.bot.train_loader=train_loader; print('reset train_loader: '+ str(train_loader));
         if val_loader is not None: self.bot.val_loader=val_loader; print('reset val_loader: '+ str(val_loader));
-
-        if optimizer is not None:
-            if self.bot.optimizer is None:
-                self.bot.optimizer = optimizer
-            else:
-                self.bot.optimizer.__init__(optimizer);
-                print('reset optimizer: '+ str(self.bot.optimizer)+' lr, etc.. will also be reset');
-
+        if optimizer is not None: self.bot.optimizer = optimizer; print('reset optimizer: '+ str(self.bot.optimizer)+' lr, etc.. will also be reset');
+        if optimizer_init is not None: self.bot.optimizer.__init__(*optimizer_init[0], **optimizer_init[1]); print('reset optimizer: '+ str(self.bot.optimizer)+' lr, etc.. will also be reset');
         if criterion is not None: self.bot.criterion=criterion; print('reset criterion: '+ str(criterion));
         if stage is not None: self.bot.stage = stage;
         if accu_gradient_step is not None: self.bot.accu_gradient_step = accu_gradient_step;

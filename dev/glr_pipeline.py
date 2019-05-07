@@ -90,7 +90,7 @@ class GLRPipeline(BasePipeline):
                         val_size=params['batch_size'][1],
                         test_size=params['batch_size'][2])
 
-            self.oc.update_bot(optimizer = params['optimizer'],
+            self.oc.update_bot(optimizer_init = params['optimizer_init'],
                     scheduler=params['scheduler'],
                     unfreeze_layers=params['unfreeze_layers'],
                     freeze_layers=params['freeze_layers'],
@@ -135,11 +135,15 @@ class GLRPipelineParams():
         [
             [
                 {
-                    'optimizer':
-                        [{'params':self.model.feat1.parameters(),'lr':1e-4},
-                         {'params':self.model.feat2.parameters(),'lr':1e-4},
-                         {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
-                         {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},],
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                             {'params':self.model.feat2.parameters(),'lr':1e-4},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                             {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
                     'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
                     'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
@@ -152,11 +156,15 @@ class GLRPipelineParams():
             ]*2,
             [
                 {
-                    'optimizer':
-                        [{'params':self.model.feat1.parameters(),'lr':1e-4},
-                         {'params':self.model.feat2.parameters(),'lr':1e-4},
-                         {'params':self.model.com_bi_pool.parameters(),'lr':5e-4},
-                         {'params':self.model.fc.parameters(),'lr':5e-4, 'eps':1e-5}],
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                             {'params':self.model.feat2.parameters(),'lr':1e-4},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':5e-4},
+                             {'params':self.model.fc.parameters(),'lr':5e-4, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
                     'resample': [1000,20,0.2], # uppser_count, lower_count, fraction
                     'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
@@ -169,11 +177,15 @@ class GLRPipelineParams():
             ]*2,
             [
                 {
-                    'optimizer':
-                        [{'params':self.model.feat1.parameters(),'lr':1e-4},
-                         {'params':self.model.feat2.parameters(),'lr':1e-4},
-                         {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
-                         {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},],
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':5e-5},
+                             {'params':self.model.feat2.parameters(),'lr':5e-5},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':2e-4},
+                             {'params':self.model.fc.parameters(),'lr':2e-4, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
                     'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
                     'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
