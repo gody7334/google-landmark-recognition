@@ -33,11 +33,10 @@ class GLRPipeline(BasePipeline):
         super().__init__(*args, **kwargs)
 
     def init_pipeline_params(self):
-        # self.stage_params = GLRPipelineParams(self.model).simple()
-        self.stage_params = GLRPipelineParams(self.model).optimizer_update()
+        self.stage_params = GLRPipelineParams(self.model).simple_resample()
 
     def init_model(self):
-        self.model = BCNN_HP(num_classes=203094, bi_vector_dim= 2048,
+        self.model = BCNN_CP_HP(num_classes=203094, bi_vector_dim= 2048,
             cnn_type1='resnet34', cnn_type2='resnet34')
 
     def init_dataloader(self):
@@ -60,7 +59,6 @@ class GLRPipeline(BasePipeline):
             folds = 0,
             fold = 0
         )
-
 
     def keep_class_by_freq(self, df, freq):
         img_count = df.landmark_id.value_counts()
@@ -130,7 +128,7 @@ class GLRPipelineParams():
         self.params = []
         pass
 
-    def optimizer_update(self):
+    def simple_resample(self):
         self.params = \
         [
             [
@@ -144,7 +142,7 @@ class GLRPipelineParams():
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
+                    'resample': [100,10,0.1], # uppser_count, lower_count, fraction
                     'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
@@ -153,7 +151,7 @@ class GLRPipelineParams():
                     'accu_gradient_step': None,
                     'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
-            ]*2,
+            ]*5,
             [
                 {
                     'optimizer_init':[
@@ -165,7 +163,7 @@ class GLRPipelineParams():
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'resample': [1000,20,0.2], # uppser_count, lower_count, fraction
+                    'resample': [100,5,0.1], # uppser_count, lower_count, fraction
                     'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
@@ -174,19 +172,19 @@ class GLRPipelineParams():
                     'accu_gradient_step': None,
                     'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
-            ]*2,
+            ]*5,
             [
                 {
                     'optimizer_init':[
                         [
-                            [{'params':self.model.feat1.parameters(),'lr':5e-5},
-                             {'params':self.model.feat2.parameters(),'lr':5e-5},
+                            [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                             {'params':self.model.feat2.parameters(),'lr':1e-4},
                              {'params':self.model.com_bi_pool.parameters(),'lr':2e-4},
                              {'params':self.model.fc.parameters(),'lr':2e-4, 'eps':1e-5},]
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
+                    'resample': [100,1,0.1], # uppser_count, lower_count, fraction
                     'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
@@ -195,7 +193,7 @@ class GLRPipelineParams():
                     'accu_gradient_step': None,
                     'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
-            ]*2,
+            ]*5,
 
         ]
         self.params = [j for sub in self.params for j in sub]

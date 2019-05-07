@@ -67,7 +67,6 @@ class BasePipeline:
         self.stage_params=None
         self.init_pipeline_params()
 
-
     def init_model(self):
         self.model = BaseResNet(resnet_type='resnet18',num_classes=203094)
 
@@ -91,13 +90,15 @@ class BasePipeline:
             fold = 0
         )
 
-
     def init_pipeline_params(self):
         self.stage_params = PipelineParams(self.model).simple()
 
     def do_cv_split(self):
+        # TODO train dataset should have all class image (at least one images)
+        # as it also help for triplet loss
         G.logger.info(f"random state: {self.random_state}")
 
+        # load file name in folder, in case some missing files
         if os.path.isfile('/home/gody7334/google-landmark/input/files_list.npy'):
             file_part = np.load('/home/gody7334/google-landmark/input/files_list.npy')
         else:
@@ -110,8 +111,15 @@ class BasePipeline:
 
         train_size=self.split_ratio[0]
         test_size=self.split_ratio[2]/(self.split_ratio[1]+self.split_ratio[2])
+
         df_train, df_val = train_test_split(df_part, train_size=train_size, random_state=self.random_state)
         df_val, df_test = train_test_split(df_val, test_size=test_size,random_state=self.random_state)
+
+        # add missing class image back to train dataset
+        df_one_image = df_part.drop_duplicates('landmark_id')
+        df_train_class = df_train.drop_duplicates('landmark_id')
+        df_missing_image = df_one_image[~df_one_image['landmark_id'].isin(df_train_class['landmark_id'].values)]
+        df_train = pd.concat([df_train, df_missing_image])
 
         self.train_df = df_train.reset_index(drop=True)
         self.val_df = df_val.reset_index(drop=True)
@@ -133,7 +141,7 @@ class BasePipeline:
                         val_size=params['batch_size'][1],
                         test_size=params['batch_size'][2])
 
-            self.oc.update_bot(optimizer = params['optimizer'],
+            self.oc.update_bot(optimizer_init = params['optimizer_init'],
                     scheduler=params['scheduler'],
                     unfreeze_layers=params['unfreeze_layers'],
                     freeze_layers=params['freeze_layers'],
