@@ -13,6 +13,7 @@ from pathlib import Path
 from utils.bot import BaseBot, ValueBuffer
 from utils.project import Global as G
 from utils.project import ArgParser as A
+from dev.triplet_loss import *
 import xgboost as xgb
 from xgboost import XGBClassifier
 from hyperopt import hp
@@ -27,6 +28,7 @@ class GLRBot(BaseBot):
         self.loss_format = "%.6f"
         self.min_logloss = 999.9
         self.best_xgboost = None
+        self.tripletloss = TripletLoss()
 
     def extract_prediction(self, tensor):
         return tensor
@@ -66,6 +68,52 @@ class GLRBot(BaseBot):
         accu = accuracy_score(targets, preds)
         return gap, accu
 
+    def train_one_step(self, input_tensors, target):
+        '''
+        override if needed
+        ex: multiple criterion, multiple model output
+        '''
+        self.model.train()
+        assert self.model.training
+        if self.step % self.accu_gradient_step == 0:
+            self.optimizer.zero_grad()
+
+        output, bi_vector = self.model(*input_tensors)
+        bce_loss = self.criterion(self.extract_prediction(output), target)
+        trip_loss, dist_ap, dist_an, dist_mat = bilinear_triplet_loss(self.tripletloss, bi_vector, target)
+        # batch_loss = bce_loss + trip_loss
+        batch_loss = bce_loss
+
+        # devide batch size to make train more stable,
+        # avg loss wont effected by batch size, so lr,
+        avg_batch_loss = batch_loss/(len(target)*self.accu_gradient_step)
+        avg_batch_loss.backward()
+
+        self.train_losses.append(batch_loss.data.cpu().numpy())
+        self.train_weights.append(target.size(self.batch_idx))
+
+        if self.step % self.accu_gradient_step == 0:
+            if self.clip_grad > 0:
+                clip_grad_norm_(self.model.parameters(), self.clip_grad)
+            self.optimizer.step()
+
+    def eval_one_step(self, input_tensors, y_local):
+        '''
+        override if needed
+        ex: multiple criterion, multiple model output
+        '''
+        self.eval_losses = []
+        self.eval_weights = []
+        input_tensors = [x.to(self.device) for x in input_tensors]
+        output, bi_vector = self.model(*input_tensors)
+        bce_loss = self.criterion(
+            self.extract_prediction(output), y_local.to(self.device))
+        trip_loss, dist_ap, dist_an, dist_mat = bilinear_triplet_loss(self.tripletloss, bi_vector, y_local.to(self.device))
+        # batch_loss = bce_loss + trip_loss
+        batch_loss = bce_loss
+        self.eval_am.append(batch_loss.data.cpu().numpy(), y_local.size(self.batch_idx))
+        return output
+
     def eval(self, loader):
         self.model.eval()
         confs, preds, y_global = [], [], []
@@ -101,6 +149,11 @@ class GLRBot(BaseBot):
             "accu", {"val": accu},  self.step)
 
         return loss
+
+    def predict_batch(self, input_tensors):
+        self.model.eval()
+        output, bi_vector  = self.model(*input_tensors)
+        return self.extract_prediction(output)
 
     def predict(self, loader, *, return_y=False):
         '''

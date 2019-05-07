@@ -47,25 +47,12 @@ class BasePipeline:
         self.init_model()
 
         G.logger.info("load data loader")
-        self.dl=GLRDataLoader(self.train_df,
-                self.val_df,
-                self.holdout_df,
-                None,
-                files_path=self.files_path,
-                split_ratio=self.split_ratio)
+        self.dl = None
+        self.init_dataloader()
 
         G.logger.info("create bot")
-        self.bot = GLRBot(
-            self.model, self.dl.train_loader, self.dl.val_loader,
-            optimizer=torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3),
-            criterion=torch.nn.CrossEntropyLoss(),
-            echo=True,
-            use_tensorboard=True,
-            avg_window=25,
-            snapshot_policy='last',
-            folds = 0,
-            fold = 0
-        )
+        self.bot = None
+        self.init_bot()
 
         G.logger.info("create onecycle")
         self.oc = OneCycle(self.bot)
@@ -83,6 +70,27 @@ class BasePipeline:
 
     def init_model(self):
         self.model = BaseResNet(resnet_type='resnet18',num_classes=203094)
+
+    def init_dataloader(self):
+        self.dl=BaseDataLoader(self.train_df,
+                self.val_df,
+                self.holdout_df,
+                None,
+                files_path=self.files_path)
+
+    def init_bot(self):
+        self.bot = BaseBot(
+            self.model, self.dl.train_loader, self.dl.val_loader,
+            optimizer=torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3),
+            criterion=torch.nn.CrossEntropyLoss(),
+            echo=True,
+            use_tensorboard=True,
+            avg_window=25,
+            snapshot_policy='last',
+            folds = 0,
+            fold = 0
+        )
+
 
     def init_pipeline_params(self):
         self.stage_params = PipelineParams(self.model).simple()
@@ -139,24 +147,19 @@ class BasePipeline:
             self.do_prediction('')
             stage+=1
 
-            if A.dev_exp=="DEV" and stage==2:
+            if A.dev_exp=="DEV" and stage==20:
                 break
 
     def do_prediction(self, target_path=''):
         if target_path != '':
             self.bot.load_model(target_path)
 
-        preds, confs, targets, loss = self.bot.predict(self.dl.test_loader, return_y=True)
+        preds, targets = self.bot.predict(self.dl.test_loader, return_y=True)
 
-        G.logger.info("holdout validation loss: %.6f", loss)
-        G.logger.tb_scalars("losses", {"Holdout": loss}, self.bot.step)
-
-        score, accu = self.bot.metrics(preds, confs, targets)
-        G.logger.info("holdout, gap: %.6f, accu: %.6f", score, accu)
+        score = self.bot.metrics(preds, targets)
+        G.logger.info("holdout, gap: %.6f, score: %.6f", score, score)
         G.logger.tb_scalars(
             "gap", {"holdout": score},  self.bot.step)
-        G.logger.tb_scalars(
-            "accu", {"holdout": accu},  self.bot.step)
 
 
 class PipelineParams():
@@ -174,39 +177,39 @@ class PipelineParams():
             [
                 {
                     'optimizer': Adam(self.model.parameters(),lr=1e-3,weight_decay=1e-4),
-                    'batch_size': [24,128,128],
+                    'batch_size': [16,128,128],
                     'scheduler': "Default Triangular",
-                    'unfreeze_layers': [(self.model.model.fc, nn.Module)],
+                    'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
                     'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
-            ]*1,
+            ]*2,
             [
                 {
                     'optimizer': Adam(self.model.parameters(),lr=1e-3,weight_decay=1e-4),
                     'batch_size': [16,128,128],
                     'scheduler': "Default Triangular",
-                    'unfreeze_layers': [(self.model.model, nn.Module)],
+                    'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
                     'epoch': 2 if A.dev_exp=="EXP" else 1,
                 }
-            ]*5,
+            ]*2,
             [
                 {
                     'optimizer': Adam(self.model.parameters(),lr=1e-4,weight_decay=1e-4),
                     'batch_size': [16,128,128],
                     'scheduler': "Default Triangular",
-                    'unfreeze_layers': [(self.model.model, nn.Module)],
+                    'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
                     'epoch': 2 if A.dev_exp=="EXP" else 1,
                 }
-            ]*5
+            ]*2
         ]
         self.params = [j for sub in self.params for j in sub]
         return self.params

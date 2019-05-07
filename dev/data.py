@@ -12,6 +12,7 @@ import cv2
 from imgaug import augmenters as iaa
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+from utils.project import ArgParser as A
 from utils.project import Global as G
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
@@ -42,7 +43,6 @@ class TripLetDataset(BaseDataset):
         self.labels = []
 
         self.build_label_idx()
-
 
     def __getitem__(self, idx):
         label = self.df.loc[idx, 'landmark_id']
@@ -97,8 +97,7 @@ class GLRDataset(TripLetDataset):
         remain = (weight.squeeze()>1e-6).sum()/weight.squeeze().shape[0]
         if remain < frac:
             frac = remain
-
-        if frac<1.0:
+        if frac<1.0 and A.dev_exp!='DEV':
             self.df = self.df.sample(frac=frac, weights=weight.squeeze(), random_state=random_state)
             self.df = self.df.reset_index(drop=True)
 

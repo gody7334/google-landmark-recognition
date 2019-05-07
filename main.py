@@ -85,6 +85,8 @@ def run_base():
     elif A.dev_exp=='DEVL':
         train_csv = '/home/gody7334/google-landmark/input/train_exp.csv'
 
+    # pl = BasePipeline(train_csv,
+            # files_path='/home/gody7334/google-landmark/input/trn-256')
     pl = GLRPipeline(train_csv,
             files_path='/home/gody7334/google-landmark/input/trn-256')
     pl.init_pipeline()

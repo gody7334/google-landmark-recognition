@@ -60,6 +60,6 @@ class BaseResNet(torch.nn.Module):
             self.block_size=4
 
     def replace_fc(self):
-        self.fc = nn.Linear(self.model.fc.in_features, num_classes)
+        self.fc = nn.Linear(self.model.fc.in_features, self.num_classes)
 
 

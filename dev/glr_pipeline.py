@@ -23,20 +23,44 @@ from utils.bot import *
 from dev.glr_bot import *
 from utils.data import *
 from dev.data import GLRDataLoader
+from dev.glr_bot import GLRBot
 from utils.model import *
 from utils.pipeline import BasePipeline
-from dev.bcnn import BCNN, BCNN_CP, BCNN_MP, BCNN_CP_HP
+from dev.bcnn import BCNN, BCNN_CP, BCNN_MP, BCNN_CP_HP, BCNN_HP
 
 class GLRPipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def init_pipeline_params(self):
-        self.stage_params = GLRPipelineParams(self.model).half_precision()
+        # self.stage_params = GLRPipelineParams(self.model).simple()
+        self.stage_params = GLRPipelineParams(self.model).optimizer_update()
 
     def init_model(self):
-        self.model = BCNN_CP_HP(num_classes=203094, bi_vector_dim= 2048,
+        self.model = BCNN_HP(num_classes=203094, bi_vector_dim= 2048,
             cnn_type1='resnet34', cnn_type2='resnet34')
+
+    def init_dataloader(self):
+        self.dl=GLRDataLoader(self.train_df,
+                self.val_df,
+                self.holdout_df,
+                None,
+                files_path=self.files_path,
+                split_ratio=self.split_ratio)
+
+    def init_bot(self):
+        self.bot = GLRBot(
+            self.model, self.dl.train_loader, self.dl.val_loader,
+            optimizer=torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3),
+            criterion=torch.nn.CrossEntropyLoss(),
+            echo=True,
+            use_tensorboard=True,
+            avg_window=25,
+            snapshot_policy='last',
+            folds = 0,
+            fold = 0
+        )
+
 
     def keep_class_by_freq(self, df, freq):
         img_count = df.landmark_id.value_counts()
@@ -80,14 +104,91 @@ class GLRPipeline(BasePipeline):
             self.do_prediction('')
             stage+=1
 
-            if A.dev_exp=="DEV" and stage==5:
+            if A.dev_exp=="DEV" and stage==10:
                 break
+
+    def do_prediction(self, target_path=''):
+        if target_path != '':
+            self.bot.load_model(target_path)
+
+        preds, confs, targets, loss = self.bot.predict(self.dl.test_loader, return_y=True)
+
+        G.logger.info("holdout validation loss: %.6f", loss)
+        G.logger.tb_scalars("losses", {"Holdout": loss}, self.bot.step)
+
+        score, accu = self.bot.metrics(preds, confs, targets)
+        G.logger.info("holdout, gap: %.6f, accu: %.6f", score, accu)
+        G.logger.tb_scalars(
+            "gap", {"holdout": score},  self.bot.step)
+        G.logger.tb_scalars(
+            "accu", {"holdout": accu},  self.bot.step)
+
 
 class GLRPipelineParams():
     def __init__(self,model):
         self.model = model
         self.params = []
         pass
+
+    def optimizer_update(self):
+        self.params = \
+        [
+            [
+                {
+                    'optimizer':
+                        [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                         {'params':self.model.feat2.parameters(),'lr':1e-4},
+                         {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                         {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},],
+                    'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
+                    'batch_size': [8,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*2,
+            [
+                {
+                    'optimizer':
+                        [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                         {'params':self.model.feat2.parameters(),'lr':1e-4},
+                         {'params':self.model.com_bi_pool.parameters(),'lr':5e-4},
+                         {'params':self.model.fc.parameters(),'lr':5e-4, 'eps':1e-5}],
+                    'resample': [1000,20,0.2], # uppser_count, lower_count, fraction
+                    'batch_size': [8,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*2,
+            [
+                {
+                    'optimizer':
+                        [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                         {'params':self.model.feat2.parameters(),'lr':1e-4},
+                         {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                         {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},],
+                    'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
+                    'batch_size': [8,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*2,
+
+        ]
+        self.params = [j for sub in self.params for j in sub]
+        return self.params
+
 
     def half_precision(self):
         self.params = \
@@ -101,7 +202,7 @@ class GLRPipelineParams():
                          {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},],
                         weight_decay=1e-4),
                     'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
-                    'batch_size': [4,64,64],
+                    'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
@@ -109,7 +210,7 @@ class GLRPipelineParams():
                     'accu_gradient_step': None,
                     'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
-            ]*2,
+            ]*1,
             [
                 {
                     'optimizer': Adam(
@@ -119,15 +220,34 @@ class GLRPipelineParams():
                          {'params':self.model.fc.parameters(),'lr':5e-4, 'eps':1e-5}],
                         weight_decay=1e-4),
                     'resample': [1000,20,0.2], # uppser_count, lower_count, fraction
-                    'batch_size': [16,64,64],
+                    'batch_size': [8,16,16],
                     'scheduler': "Default Triangular",
-                    'unfreeze_layers': [(self.model.fc, nn.Module)],
+                    'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
                     'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
-            ]*2
+            ]*1,
+            [
+                {
+                    'optimizer': Adam(
+                        [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                         {'params':self.model.feat2.parameters(),'lr':1e-4},
+                         {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                         {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},],
+                        weight_decay=1e-4),
+                    'resample': [1000,50,0.2], # uppser_count, lower_count, fraction
+                    'batch_size': [8,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*1,
+
         ]
         self.params = [j for sub in self.params for j in sub]
         return self.params

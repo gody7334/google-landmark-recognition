@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import Module
+from torch.nn.modules.batchnorm import *
 import torch.utils.checkpoint as checkpoint
 import torch.nn.functional as F
 from torchvision.models import *
@@ -72,6 +73,7 @@ class BCNN(Module):
         self.com_bi_pool = CompactBilinearPooling(256*self.feat1.block_size*16*16,
                 256*self.feat2.block_size*16*16,
                 bi_vector_dim)
+        self.bi_vector_bn = BatchNorm1d(bi_vector_dim)
         self.fc = nn.Linear(bi_vector_dim, num_classes)
 
     def forward(self, x):
@@ -80,8 +82,25 @@ class BCNN(Module):
         f1 = f1.view(f1.size(0), -1)
         f2 = f2.view(f2.size(0), -1)
         bi_vector = self.com_bi_pool(f1, f2)
+        bi_vector = self.bi_vector_bn(bi_vector)
         fc = self.fc(bi_vector)
-        return fc
+        return fc, bi_vector
+
+class BCNN_HP(BCNN):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fc = self.fc.half()
+
+    def forward(self, x):
+        f1 = self.feat1(x)
+        f2 = self.feat2(x)
+        f1 = f1.view(f1.size(0), -1)
+        f2 = f2.view(f2.size(0), -1)
+        bi_vector = self.com_bi_pool(f1, f2)
+        bi_vector = self.bi_vector_bn(bi_vector)
+        fc = self.fc(bi_vector.half()).float()
+        return fc, bi_vector
+
 
 class BCNN_MP(Module):
     def __init__(self, num_classes=100,
@@ -127,6 +146,7 @@ class BCNN_CP(BCNN):
     def bi_check_point(self):
         def forward(*x):
             bi_vector = self.com_bi_pool(x[0], x[1])
+            bi_vector = self.bi_vector_bn(bi_vector)
             return bi_vector
         return forward
 
@@ -167,6 +187,4 @@ class BCNN_CP_HP(BCNN_CP):
         f2 = f2.view(f2.size(0), -1)
         bi_vector = checkpoint.checkpoint(self.bi_check_point(), f1, f2)
         fc = self.fc(bi_vector.half()).float()
-        return fc
-
-
+        return fc, bi_vector
