@@ -52,7 +52,8 @@ class OneCycle:
         unfreeze_layers=[], freeze_layers=[], dropout_ratio=[],
         pretrained_path='', continue_step=0, scheduler=None,
         lrs=[], n_epoch=None, n_step=None, stage='',
-        accu_gradient_step=None, log_interval=100):
+        accu_gradient_step=None, log_interval=100,
+        eval_interval=None, eval_step=None):
 
         assert len(unfreeze_layers) == 0 or len(freeze_layers) ==0, \
                 "unfreeze_layers[] and freeze_layers[] can only choose one"
@@ -78,6 +79,12 @@ class OneCycle:
 
         self.steps_per_epoch = len(self.bot.train_loader)
         if n_step is None: self.n_step = self.steps_per_epoch*n_epoch;
+
+        self.eval_interval = eval_interval if eval_interval is not None else self.steps_per_epoch;
+        G.logger.info(f'eval interval: {self.eval_interval}')
+
+        if eval_step is not None: self.bot.eval_step=eval_step
+        G.logger.info(f'eval step: {eval_step}')
 
         '''
         one cycle default scheduler,
@@ -121,7 +128,7 @@ class OneCycle:
         self.bot.train(
             self.n_step,
             log_interval=self.log_interval,
-            eval_interval=self.steps_per_epoch
+            eval_interval=self.eval_interval,
             )
 
 # evaluate meters
@@ -190,7 +197,7 @@ class BaseBot:
             scheduler=None, clip_grad=0, avg_window=AVERAGING_WINDOW,
             batch_idx=0,echo=False, device="cuda:0", use_tensorboard=False,
             snapshot_policy='validate', stage='0', accu_gradient_step=1,
-            folds=5, fold=0):
+            folds=5, fold=0, eval_step=99999999):
 
         assert model is not None
         assert optimizer is not None
@@ -206,6 +213,7 @@ class BaseBot:
         self.scheduler = scheduler
         self.folds = folds
         self.fold = fold
+        self.eval_step = eval_step
 
         self.device = device
         self.avg_window = avg_window
@@ -366,7 +374,7 @@ class BaseBot:
     def train(
             self, n_steps, *, log_interval=50,
             early_stopping_cnt=0, min_improv=1e-4,
-            eval_interval=2500):
+            eval_interval=2500, eval_step=9999999):
         self.train_losses = deque(maxlen=self.avg_window)
         self.train_weights = deque(maxlen=self.avg_window)
 
@@ -436,10 +444,16 @@ class BaseBot:
         losses, weights = [], []
         self.eval_am.reset()
         self.logger.info("start eval, plz wait...")
+        step_cnt=0
 
         with torch.set_grad_enabled(False):
             for *input_tensors, y_local in tqdm(loader):
                 self.eval_one_step(input_tensors, y_local)
+
+                step_cnt+=1
+                if step_cnt > self.eval_step:
+                    break
+
         loss = self.eval_am.avg
         loss_str = self.loss_format % loss
         self.logger.info("Snapshot loss %s", loss_str)

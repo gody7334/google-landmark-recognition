@@ -33,10 +33,10 @@ class GLRPipeline(BasePipeline):
         super().__init__(*args, **kwargs)
 
     def init_pipeline_params(self):
-        self.stage_params = GLRPipelineParams(self.model).simple_resample()
+        self.stage_params = GLRPipelineParams(self.model).simple_cutoff()
 
     def init_model(self):
-        self.model = BCNN_CP_HP(num_classes=203094, bi_vector_dim= 2048,
+        self.model = BCNN_CP_HP(num_classes=203095, bi_vector_dim= 2048,
             cnn_type1='resnet34', cnn_type2='resnet34')
 
     def init_dataloader(self):
@@ -69,6 +69,10 @@ class GLRPipeline(BasePipeline):
     def do_cycles_train(self):
         G.logger.info("start cycle training")
         stage=0
+        # eval every 5000 step as one epoch is too long
+        # eval only 100 step as eval too much eval data
+        eval_interval=5000
+        eval_step=100
         while(stage<len(self.stage_params)):
             params = self.stage_params[stage]
             G.logger.info("Start stage %s", str(stage))
@@ -78,10 +82,15 @@ class GLRPipeline(BasePipeline):
             if params['batch_size'] is not None:
                 self.dl.get_dataset()
                 # update dataset df for resample dataset
-                self.dl.resample_dataset(random_state=stage,
-                        upper_count=params['resample'][0],
-                        lower_count=params['resample'][1],
-                        frac=params['resample'][2])
+                # self.dl.resample_dataset(random_state=stage,
+                        # upper_count=params['resample'][0],
+                        # lower_count=params['resample'][1],
+                        # frac=params['resample'][2])
+
+                # remove lower freq class data in train for fast convergen
+                lower_count = 1 if A.dev_exp=='DEV' else params['cutoff']
+                self.dl.cutoff_dataset(lower_count=lower_count)
+
                 # update dataloader for new dataset
                 self.dl.update_batch_size(
                         train_size=params['batch_size'][0],
@@ -97,6 +106,8 @@ class GLRPipeline(BasePipeline):
                     stage=str(stage),
                     train_loader=self.dl.train_loader,
                     val_loader=self.dl.val_loader,
+                    eval_interval=eval_interval,
+                    eval_step=eval_step
                     )
             self.oc.train_one_cycle()
             self.do_prediction('')
@@ -128,6 +139,56 @@ class GLRPipelineParams():
         self.params = []
         pass
 
+    def simple_cutoff(self):
+        self.params = \
+        [
+            [
+                {
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                             {'params':self.model.feat2.parameters(),'lr':1e-4},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                             {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
+                    'cutoff': 20,
+                    'batch_size': [8,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*1,
+            [
+                {
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                             {'params':self.model.feat2.parameters(),'lr':1e-4},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                             {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
+                    'cutoff': 10,
+                    'batch_size': [8,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*2,
+        ]
+
+        self.params = [j for sub in self.params for j in sub]
+        return self.params
+
     def simple_resample(self):
         self.params = \
         [
@@ -142,8 +203,50 @@ class GLRPipelineParams():
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'resample': [100,10,0.1], # uppser_count, lower_count, fraction
-                    'batch_size': [8,16,16],
+                    'resample': [1000,50,[0.1,0.05,0.1]], # uppser_count, lower_count, [train, val, test fraction]
+                    'batch_size': [4,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*2,
+            [
+                {
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                             {'params':self.model.feat2.parameters(),'lr':1e-4},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                             {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
+                    'resample': [500,20,[0.1,0.05,0.1]], # uppser_count, lower_count, fraction
+                    'batch_size': [4,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*2,
+            [
+                {
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':1e-4},
+                             {'params':self.model.feat2.parameters(),'lr':1e-4},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
+                             {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
+                    'resample': [100,10,[0.1,0.05,0.1]], # uppser_count, lower_count, fraction
+                    'batch_size': [4,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
@@ -163,8 +266,8 @@ class GLRPipelineParams():
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'resample': [100,5,0.1], # uppser_count, lower_count, fraction
-                    'batch_size': [8,16,16],
+                    'resample': [100,5,[0.1,0.05,0.1]], # uppser_count, lower_count, fraction
+                    'batch_size': [4,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
@@ -184,8 +287,8 @@ class GLRPipelineParams():
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'resample': [100,1,0.1], # uppser_count, lower_count, fraction
-                    'batch_size': [8,16,16],
+                    'resample': [100,1,[0.1,0.05,0.1]], # uppser_count, lower_count, fraction
+                    'batch_size': [4,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
@@ -198,7 +301,6 @@ class GLRPipelineParams():
         ]
         self.params = [j for sub in self.params for j in sub]
         return self.params
-
 
     def half_precision(self):
         self.params = \

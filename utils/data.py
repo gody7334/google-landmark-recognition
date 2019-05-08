@@ -12,6 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from utils.project import Global as G
+from utils.project import ArgParser as A
 
 def base_collate(batch):
     batch_size = len(batch)
@@ -35,7 +36,7 @@ def base_collate(batch):
 class BaseDataset(Dataset):
 
     def __init__(self, df, files_path, w=256, h=256,
-            mode='train', labeled=True):
+            mode='train', labeled=True, collate_fn=base_collate):
         self.df = df
         self.files_path = files_path
         self.w = w
@@ -43,6 +44,7 @@ class BaseDataset(Dataset):
         self.mode = mode
         self.labeled = labeled
         self.augmentor = self.augment_pipe()
+        self.collate_fn = collate_fn
 
     def __len__(self):
         return len(self.df)
@@ -52,7 +54,6 @@ class BaseDataset(Dataset):
         label = self.df.loc[idx, 'landmark_id']
         img = cv2.imread(os.path.join(self.files_path, filename+'.jpg'))
 
-        # TODO only on train augment image
         if self.mode=='train':
             img = self.augmentor.augment_image(img)
 
@@ -91,6 +92,20 @@ class BaseDataset(Dataset):
             ], random_order=True)
         return augmentor
 
+    def resample_df(self, frac=0.1, random_state=0):
+        G.logger.info(f"resample random state: {random_state}")
+
+        if frac<1.0 and A.dev_exp!='DEV':
+            self.df = self.df.sample(frac=frac, random_state=random_state)
+            self.df = self.df.reset_index(drop=True)
+
+        remain_class = self.df.landmark_id.value_counts()
+        remain_class.name = 'img_count'
+        G.logger.info(f'number of class after resample: {len(remain_class)}')
+        G.logger.info(f'data reamin ratio after filtering: {frac}')
+        G.logger.info(f'data reamin number after filtering: {len(self.df)}')
+
+
 
 class BaseDataLoader():
     def __init__(self,
@@ -101,8 +116,7 @@ class BaseDataLoader():
             files_path='',
             train_size=20,
             val_size=128,
-            test_size=128,
-            collate_fn=base_collate):
+            test_size=128):
 
         self.df_train = df_train
         self.df_val = df_val
@@ -110,7 +124,6 @@ class BaseDataLoader():
         self.sample_sub = sample_sub
         self.files_path = files_path
         self.df_submission = None
-        self.collate_fn = collate_fn
 
         self.train_ds = None
         self.val_ds = None
@@ -128,13 +141,16 @@ class BaseDataLoader():
     def get_dataset(self):
         self.train_ds = BaseDataset(self.df_train,
                 self.files_path,
-                mode='train')
+                mode='train',
+                collate_fn=base_collate)
         self.val_ds = BaseDataset(self.df_val,
                 self.files_path,
-                mode='val')
+                mode='val',
+                collate_fn=base_collate)
         self.test_ds = BaseDataset(self.df_test,
                 self.files_path,
-                mode='test')
+                mode='test',
+                collate_fn=base_collate)
 
     def set_submission_dataloader(self, df_submission):
         self.df_submission = df_submission
@@ -161,24 +177,25 @@ class BaseDataLoader():
     def get_dataloader(self):
         self.train_loader = DataLoader(
             self.train_ds,
-            collate_fn = self.collate_fn,
+            collate_fn = self.train_ds.collate_fn,
             batch_size=self.train_size,
             num_workers=4,
             pin_memory=True,
             shuffle=True,
             drop_last=True
         )
+        # set val loader to be shuffle for fast validate
         self.val_loader = DataLoader(
             self.val_ds,
-            collate_fn = self.collate_fn,
+            collate_fn = self.val_ds.collate_fn,
             batch_size=self.val_size,
             num_workers=4,
             pin_memory=True,
-            shuffle=False
+            shuffle=True
         )
         self.test_loader = DataLoader(
             self.test_ds,
-            collate_fn = self.collate_fn,
+            collate_fn = self.test_ds.collate_fn,
             batch_size=self.test_size,
             num_workers=4,
             pin_memory=True,

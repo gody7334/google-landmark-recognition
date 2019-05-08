@@ -81,8 +81,7 @@ class GLRBot(BaseBot):
         output, bi_vector = self.model(*input_tensors)
         bce_loss = self.criterion(self.extract_prediction(output), target)
         trip_loss, dist_ap, dist_an, dist_mat = bilinear_triplet_loss(self.tripletloss, bi_vector, target)
-        # batch_loss = bce_loss + trip_loss
-        batch_loss = bce_loss
+        batch_loss = bce_loss + trip_loss
 
         # devide batch size to make train more stable,
         # avg loss wont effected by batch size, so lr,
@@ -109,14 +108,14 @@ class GLRBot(BaseBot):
         bce_loss = self.criterion(
             self.extract_prediction(output), y_local.to(self.device))
         trip_loss, dist_ap, dist_an, dist_mat = bilinear_triplet_loss(self.tripletloss, bi_vector, y_local.to(self.device))
-        # batch_loss = bce_loss + trip_loss
-        batch_loss = bce_loss
+        batch_loss = bce_loss + trip_loss
         self.eval_am.append(batch_loss.data.cpu().numpy(), y_local.size(self.batch_idx))
         return output
 
     def eval(self, loader):
         self.model.eval()
         confs, preds, y_global = [], [], []
+        step_cnt=0
         self.eval_am.reset()
         confs = ValueBuffer()
         preds = ValueBuffer()
@@ -132,6 +131,10 @@ class GLRBot(BaseBot):
                 confs.concat(conf.data.cpu().numpy().astype(np.float16))
                 preds.concat(pred.data.cpu().numpy().astype(np.int32))
                 targs.concat(y_local.data.cpu().numpy().astype(np.int32))
+
+                step_cnt+=1
+                if step_cnt > self.eval_step:
+                    break
 
         loss = self.eval_am.avg
         loss_str = self.loss_format % loss
