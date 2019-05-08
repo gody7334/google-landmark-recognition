@@ -36,8 +36,8 @@ class GLRPipeline(BasePipeline):
         self.stage_params = GLRPipelineParams(self.model).simple_cutoff()
 
     def init_model(self):
-        self.model = BCNN_CP_HP(num_classes=203095, bi_vector_dim= 2048,
-            cnn_type1='resnet34', cnn_type2='resnet34')
+        self.model = BCNN_CP_HP(num_classes=203095, bi_vector_dim= 8192,
+            cnn_type1='resnet101', cnn_type2='resnet101')
 
     def init_dataloader(self):
         self.dl=GLRDataLoader(self.train_df,
@@ -72,7 +72,7 @@ class GLRPipeline(BasePipeline):
         # eval every 5000 step as one epoch is too long
         # eval only 100 step as eval too much eval data
         eval_interval=5000
-        eval_step=100
+        eval_step=1000
         while(stage<len(self.stage_params)):
             params = self.stage_params[stage]
             G.logger.info("Start stage %s", str(stage))
@@ -154,7 +154,7 @@ class GLRPipelineParams():
                         {'weight_decay':1e-4}
                     ],
                     'cutoff': 20,
-                    'batch_size': [8,16,16],
+                    'batch_size': [4,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
@@ -175,7 +175,7 @@ class GLRPipelineParams():
                         {'weight_decay':1e-4}
                     ],
                     'cutoff': 10,
-                    'batch_size': [8,16,16],
+                    'batch_size': [4,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],

@@ -73,8 +73,14 @@ class BCNN(Module):
         self.com_bi_pool = CompactBilinearPooling(256*self.feat1.block_size*16*16,
                 256*self.feat2.block_size*16*16,
                 bi_vector_dim)
-        self.bi_vector_bn = BatchNorm1d(bi_vector_dim)
-        self.fc = nn.Linear(bi_vector_dim, num_classes)
+        self.bi_vector_bn = nn.Sequential(
+                nn.BatchNorm1d(bi_vector_dim),
+                nn.Dropout(0.5),
+                nn.Linear(bi_vector_dim, 2048),
+                nn.ReLU(),
+                BatchNorm1d(2048),
+            )
+        self.fc = nn.Linear(2048, num_classes)
 
     def forward(self, x):
         f1 = self.feat1(x)
