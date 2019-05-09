@@ -149,7 +149,7 @@ class GLRDataLoader(BaseDataLoader):
         self.val_ds = GLRDataset(self.df_val,
                 self.files_path,
                 mode='val',
-                collate_fn=base_collate)
+                collate_fn=triplet_collate)
         self.test_ds = BaseDataset(self.df_test,
                 self.files_path,
                 mode='test',

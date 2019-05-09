@@ -307,9 +307,8 @@ class BaseBot:
             self.snapshot_policy == 'last':
             loss_str = self.loss_format % loss
             target_path = (
-                self.checkpoint_dir /
-                "cv{}-{}_stage{}_snapshot_{}_{}.pth"\
-                        .format(self.fold, self.folds, self.stage, self.name, loss_str))
+                self.checkpoint_dir + \
+                f"cv{self.fold}-{self.folds}_stage{self.stage}_step{self.step}_snapshot_{self.name}_{loss}.pth")
             self.best_performers.append((loss, target_path, self.step))
             self.logger.info("Saving checkpoint %s...", target_path)
             torch.save(self.model.state_dict(), target_path)
@@ -437,6 +436,10 @@ class BaseBot:
                 self.snapshot(loss)
 
         except KeyboardInterrupt:
+            # do eval and snapshot for keyboard interrupt
+            G.logger.info(f'interrupt at stpe:{self.step}')
+            loss = self.eval(self.val_loader)
+            self.snapshot(loss)
             pass
         self.best_performers = sorted(self.best_performers, key=lambda x: x[0])
         self.logger.tb_export_scalars()

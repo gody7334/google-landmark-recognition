@@ -1,6 +1,7 @@
 from utils.project import ArgParser as A;
 from utils.project import Global as G
 
+import glob
 from pathlib import Path
 from pprint import pprint as pp
 import itertools
@@ -27,7 +28,7 @@ from utils.model import *
 
 
 class BasePipeline:
-    def __init__(self, train_csv, test_csv='', files_path='', random_state=2019, split_ratio=[0.8,0.1,0.1]):
+    def __init__(self, train_csv, test_csv='', files_path='', random_state=2019, split_ratio=[0.9,0.05,0.05]):
         self.train_csv = train_csv
         self.test_csv = test_csv
         self.files_path = files_path
@@ -125,14 +126,78 @@ class BasePipeline:
         self.val_df = df_val.reset_index(drop=True)
         self.holdout_df = df_test.reset_index(drop=True)
 
+    def load_stage_model(self):
+        while True:
+            bool_load_pretrain = input('if load pretrain model? yes or no: ')
+            if bool_load_pretrain == 'no':
+                break
+
+            pattern = input('load model from previous stage pattern: ')
+            continue_step = int(input('continue training from step? '))
+            path = glob.glob(G.proj.check_point+pattern)
+            if len(path) == 1:
+                G.logger.info(f"continue from {path[0]}, steps {continue_step}")
+                self.oc.update_bot(pretrained_path=path[0], continue_step=continue_step, n_step=0)
+                break
+            else:
+                print('pretrain model not exist or find multiple model that match pattern, please try again')
+
+        bool_do_predict = input('if predict using pretrained or previous model, it will take a while? yes or no: ')
+        if bool_do_predict == 'yes':
+            self.do_prediction('')
+
+    def get_stage_params(self):
+        base_lr = float(input('base lr: '))
+        G.logger.info(f"base lr: {base_lr}")
+
+        cutoff = int(input('class count for cutoff: '))
+        G.logger.info(f"cutoff count: {cutoff}")
+
+        eval_interval = int(input('eval interval step: '))
+        G.logger.info(f"eval interval step: {eval_interval}")
+
+        eval_step = int(input('steps in eval: '))
+        G.logger.info(f"steps in eval: {eval_step}")
+
+        params = {
+                    'optimizer_init':[
+                            [
+                                 [{'params':self.model.fc.parameters(),'lr':base_lr, 'eps':1e-5},]
+                            ]
+                        ,
+                        {
+                            'weight_decay':1e-4,
+                            'lr':2e-4
+                        }
+                    ],
+                    'batch_size': [16,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                    'eval_interval': eval_interval,
+                    'eval_step': eval_step,
+                }
+        return params
+
     def do_cycles_train(self):
         G.logger.info("start cycle training")
         stage=0
-        eval_interval=5000
-        eval_step=500
-        while(stage<len(self.stage_params)):
-            params = self.stage_params[stage]
+
+        # while(stage<len(self.stage_params)):
+            # params = self.stage_params[stage]
+
+        while(True):
+            self.load_stage_model()
+            params = self.get_stage_params()
             G.logger.info("Start stage %s", str(stage))
+
+            # eval every 5000 step as one epoch is too long
+            # eval only 100 step as eval too much eval data
+            eval_interval=params['eval_interval']
+            eval_step=params['eval_step']
 
             if params['batch_size'] is not None:
                 # update dataloader for new dataset

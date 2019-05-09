@@ -66,16 +66,58 @@ class GLRPipeline(BasePipeline):
         df = df.join(img_count, on='landmark_id')
         df = df[df['img_count']>100]
 
+    def get_stage_params(self):
+        base_lr = float(input('base lr: '))
+        G.logger.info(f"base lr: {base_lr}")
+
+        cutoff = int(input('class count for cutoff: '))
+        G.logger.info(f"cutoff count: {cutoff}")
+
+        eval_interval = int(input('eval interval step: '))
+        G.logger.info(f"eval interval step: {eval_interval}")
+
+        eval_step = int(input('steps in eval: '))
+        G.logger.info(f"steps in eval: {eval_step}")
+
+        params = {
+                    'optimizer_init':[
+                        [
+                            [{'params':self.model.feat1.parameters(),'lr':base_lr*0.1},
+                             {'params':self.model.feat2.parameters(),'lr':base_lr*0.1},
+                             {'params':self.model.com_bi_pool.parameters(),'lr':base_lr},
+                             {'params':self.model.fc.parameters(),'lr':base_lr, 'eps':1e-5},]
+                        ],
+                        {'weight_decay':1e-4}
+                    ],
+                    'cutoff': cutoff,
+                    'batch_size': [4,16,16],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                    'eval_interval': eval_interval,
+                    'eval_step': eval_step,
+                }
+        return params
+
     def do_cycles_train(self):
         G.logger.info("start cycle training")
         stage=0
-        # eval every 5000 step as one epoch is too long
-        # eval only 100 step as eval too much eval data
-        eval_interval=5000
-        eval_step=500
-        while(stage<len(self.stage_params)):
-            params = self.stage_params[stage]
+
+        # while(stage<len(self.stage_params)):
+            # params = self.stage_params[stage]
+
+        while(True):
+            self.load_stage_model()
+            params = self.get_stage_params()
             G.logger.info("Start stage %s", str(stage))
+
+            # eval every 5000 step as one epoch is too long
+            # eval only 100 step as eval too much eval data
+            eval_interval=params['eval_interval']
+            eval_step=params['eval_step']
 
             if A.dev_exp=='DEV': frac=1.0
 
@@ -110,7 +152,7 @@ class GLRPipeline(BasePipeline):
                     eval_step=eval_step
                     )
             self.oc.train_one_cycle()
-            self.do_prediction('')
+            # self.do_prediction('')
             stage+=1
 
             if A.dev_exp=="DEV" and stage==10:
