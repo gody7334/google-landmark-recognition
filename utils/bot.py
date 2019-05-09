@@ -227,8 +227,7 @@ class BaseBot:
 
         self.logger = G.logger
         self.logger.info("SEED: %s", SEED)
-        self.checkpoint_dir = Path(G.proj.check_point)
-        self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
+        self.checkpoint_dir = G.proj.check_point
         self.loss_format = "%.8f"
 
         self.best_performers = []
@@ -306,8 +305,8 @@ class BaseBot:
         if self.snapshot_policy == 'validate' or \
             self.snapshot_policy == 'last':
             loss_str = self.loss_format % loss
-            target_path = (
-                self.checkpoint_dir + \
+            target_path = os.path.join( \
+                self.checkpoint_dir, \
                 f"cv{self.fold}-{self.folds}_stage{self.stage}_step{self.step}_snapshot_{self.name}_{loss}.pth")
             self.best_performers.append((loss, target_path, self.step))
             self.logger.info("Saving checkpoint %s...", target_path)

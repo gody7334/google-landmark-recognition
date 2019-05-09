@@ -24,6 +24,7 @@ class Self_Attn(nn.Module):
         self.gamma = nn.Parameter(torch.zeros(1))
 
         self.softmax  = nn.Softmax(dim=-1) #
+
     def forward(self,x):
         """
             inputs :
