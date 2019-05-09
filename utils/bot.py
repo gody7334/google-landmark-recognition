@@ -1,6 +1,7 @@
 import os
 import random
 import logging
+import curses
 from pathlib import Path
 from collections import deque
 from matplotlib.pyplot import *
@@ -88,13 +89,14 @@ class OneCycle:
 
         '''
         one cycle default scheduler,
-        one cycle(len of one cycle) is decided by n_step
+        one cycle(len of one cycle) is decided by n_step, or eval interval
         or you can assign customized scheduler
         '''
         if scheduler is not None:
             del self.bot.scheduler
             if scheduler == 'Default Triangular':
-                self.bot.scheduler=TriangularLR(self.bot.optimizer, 11, ratio=3, steps_per_cycle=self.n_step)
+                steps_per_cycle=eval_interval if eval_interval is not None else self.n_step
+                self.bot.scheduler=TriangularLR(self.bot.optimizer, 11, ratio=3, steps_per_cycle=steps_per_cycle)
             else:
                 self.bot.scheduler=scheduler; print('reset scheduler: '+ str(scheduler));
 
@@ -301,7 +303,7 @@ class BaseBot:
 
     def snapshot(self, loss, rule='min'):
         #TODO save every validate or save best,
-        if self.snapshot_policy == 'valid' or \
+        if self.snapshot_policy == 'validate' or \
             self.snapshot_policy == 'last':
             loss_str = self.loss_format % loss
             target_path = (

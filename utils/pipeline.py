@@ -68,7 +68,7 @@ class BasePipeline:
         self.init_pipeline_params()
 
     def init_model(self):
-        self.model = BaseResNet(resnet_type='resnet18',num_classes=203094)
+        self.model = ResNet_HP(resnet_type='resnet34',num_classes=203095)
 
     def init_dataloader(self):
         self.dl=BaseDataLoader(self.train_df,
@@ -85,7 +85,7 @@ class BasePipeline:
             echo=True,
             use_tensorboard=True,
             avg_window=25,
-            snapshot_policy='last',
+            snapshot_policy='validate',
             folds = 0,
             fold = 0
         )
@@ -128,11 +128,11 @@ class BasePipeline:
     def do_cycles_train(self):
         G.logger.info("start cycle training")
         stage=0
+        eval_interval=5000
+        eval_step=500
         while(stage<len(self.stage_params)):
             params = self.stage_params[stage]
             G.logger.info("Start stage %s", str(stage))
-
-            frac=0.1 if A.dev_exp=='EXP' else 1.0
 
             if params['batch_size'] is not None:
                 # update dataloader for new dataset
@@ -150,6 +150,8 @@ class BasePipeline:
                     stage=str(stage),
                     train_loader=self.dl.train_loader,
                     val_loader=self.dl.val_loader,
+                    eval_interval=eval_interval,
+                    eval_step=eval_step
                     )
             self.oc.train_one_cycle()
             self.do_prediction('')
@@ -184,7 +186,37 @@ class PipelineParams():
         [
             [
                 {
-                    'optimizer': Adam(self.model.parameters(),lr=1e-3,weight_decay=1e-4),
+                    'optimizer_init':[
+                            [
+                                 [{'params':self.model.fc.parameters(),'lr':2e-4, 'eps':1e-5},]
+                            ]
+                        ,
+                        {
+                            'weight_decay':1e-4,
+                            'lr':2e-4
+                        }
+                    ],
+                    'batch_size': [16,128,128],
+                    'scheduler': "Default Triangular",
+                    'unfreeze_layers': [(self.model, nn.Module)],
+                    'freeze_layers': [],
+                    'dropout_ratio': [],
+                    'accu_gradient_step': None,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
+                }
+            ]*1,
+            [
+                {
+                    'optimizer_init':[
+                            [
+                                 [{'params':self.model.fc.parameters(),'lr':2e-4, 'eps':1e-5},]
+                            ]
+                        ,
+                        {
+                            'weight_decay':1e-4,
+                            'lr': 2e-4
+                        }
+                    ],
                     'batch_size': [16,128,128],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
@@ -196,26 +228,23 @@ class PipelineParams():
             ]*2,
             [
                 {
-                    'optimizer': Adam(self.model.parameters(),lr=1e-3,weight_decay=1e-4),
+                    'optimizer_init':[
+                             [
+                                 [{'params':self.model.fc.parameters(),'lr':1e-4, 'eps':1e-5},]
+                             ]
+                        ,
+                        {
+                            'weight_decay':1e-4,
+                            'lr': 1e-4
+                        }
+                    ],
                     'batch_size': [16,128,128],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
                     'freeze_layers': [],
                     'dropout_ratio': [],
                     'accu_gradient_step': None,
-                    'epoch': 2 if A.dev_exp=="EXP" else 1,
-                }
-            ]*2,
-            [
-                {
-                    'optimizer': Adam(self.model.parameters(),lr=1e-4,weight_decay=1e-4),
-                    'batch_size': [16,128,128],
-                    'scheduler': "Default Triangular",
-                    'unfreeze_layers': [(self.model, nn.Module)],
-                    'freeze_layers': [],
-                    'dropout_ratio': [],
-                    'accu_gradient_step': None,
-                    'epoch': 2 if A.dev_exp=="EXP" else 1,
+                    'epoch': 1 if A.dev_exp=="EXP" else 1,
                 }
             ]*2
         ]

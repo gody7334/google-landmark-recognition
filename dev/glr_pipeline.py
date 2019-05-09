@@ -36,8 +36,8 @@ class GLRPipeline(BasePipeline):
         self.stage_params = GLRPipelineParams(self.model).simple_cutoff()
 
     def init_model(self):
-        self.model = BCNN_CP_HP(num_classes=203095, bi_vector_dim= 8192,
-            cnn_type1='resnet101', cnn_type2='resnet101')
+        self.model = BCNN_CP_HP(num_classes=203100, bi_vector_dim= 8192,
+            cnn_type1='resnet34', cnn_type2='resnet34')
 
     def init_dataloader(self):
         self.dl=GLRDataLoader(self.train_df,
@@ -55,7 +55,7 @@ class GLRPipeline(BasePipeline):
             echo=True,
             use_tensorboard=True,
             avg_window=25,
-            snapshot_policy='last',
+            snapshot_policy='validate',
             folds = 0,
             fold = 0
         )
@@ -72,7 +72,7 @@ class GLRPipeline(BasePipeline):
         # eval every 5000 step as one epoch is too long
         # eval only 100 step as eval too much eval data
         eval_interval=5000
-        eval_step=1000
+        eval_step=500
         while(stage<len(self.stage_params)):
             params = self.stage_params[stage]
             G.logger.info("Start stage %s", str(stage))
@@ -148,12 +148,12 @@ class GLRPipelineParams():
                         [
                             [{'params':self.model.feat1.parameters(),'lr':1e-4},
                              {'params':self.model.feat2.parameters(),'lr':1e-4},
-                             {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
-                             {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},]
+                             {'params':self.model.com_bi_pool.parameters(),'lr':2e-4},
+                             {'params':self.model.fc.parameters(),'lr':2e-4, 'eps':1e-5},]
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'cutoff': 20,
+                    'cutoff': 100,
                     'batch_size': [4,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],
@@ -169,12 +169,12 @@ class GLRPipelineParams():
                         [
                             [{'params':self.model.feat1.parameters(),'lr':1e-4},
                              {'params':self.model.feat2.parameters(),'lr':1e-4},
-                             {'params':self.model.com_bi_pool.parameters(),'lr':1e-3},
-                             {'params':self.model.fc.parameters(),'lr':1e-3, 'eps':1e-5},]
+                             {'params':self.model.com_bi_pool.parameters(),'lr':2e-4},
+                             {'params':self.model.fc.parameters(),'lr':2e-4, 'eps':1e-5},]
                         ],
                         {'weight_decay':1e-4}
                     ],
-                    'cutoff': 10,
+                    'cutoff': 50,
                     'batch_size': [4,16,16],
                     'scheduler': "Default Triangular",
                     'unfreeze_layers': [(self.model, nn.Module)],

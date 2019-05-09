@@ -140,13 +140,13 @@ class GLRDataLoader(BaseDataLoader):
 
     # override for different dataset needed
     def get_dataset(self):
-        # val and test only need base dataset,
+        # test only need base dataset,
         # as we care final score more related to bce
         self.train_ds = GLRDataset(self.df_train,
                 self.files_path,
                 mode='train',
                 collate_fn=triplet_collate)
-        self.val_ds = BaseDataset(self.df_val,
+        self.val_ds = GLRDataset(self.df_val,
                 self.files_path,
                 mode='val',
                 collate_fn=base_collate)
@@ -157,7 +157,8 @@ class GLRDataLoader(BaseDataLoader):
 
     def cutoff_dataset(self, lower_count=20):
         self.get_dataset()
-        self.train_ds.remove_low_freq_sample(lower_count)
+        self.train_ds.remove_low_freq_sample(lower_count*self.split_ratio[0])
+        self.val_ds.remove_low_freq_sample(lower_count*self.split_ratio[1])
 
     # override for different dataset needed
     def resample_dataset(self, upper_count=100, lower_count=10,frac=[0.1,0.1,0.1], random_state=0):
@@ -166,6 +167,10 @@ class GLRDataLoader(BaseDataLoader):
         self.train_ds.resample_df(upper_count=upper_count*self.split_ratio[0],
                 lower_count=lower_count*self.split_ratio[0],
                 frac=frac[0],
+                random_state=random_state)
+        self.train_ds.resample_df(upper_count=upper_count*self.split_ratio[1],
+                lower_count=lower_count*self.split_ratio[1],
+                frac=frac[1],
                 random_state=random_state)
         self.val_ds.resample_df(frac=frac[1], random_state=random_state)
         self.test_ds.resample_df(frac=frac[2], random_state=random_state)
