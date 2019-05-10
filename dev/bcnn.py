@@ -50,13 +50,14 @@ class Self_Attn(nn.Module):
 class Resnet_Feat(BaseResNet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.attn = Self_Attn(256*self.block_size,'relu')
+        self.attn = Self_Attn(512*self.block_size,'relu')
 
     def forward(self, x):
         x = self.layer0(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
+        x = self.layer4(x)
         x = self.attn(x)
         return x
 
@@ -71,15 +72,17 @@ class BCNN(Module):
 
         self.feat1 = Resnet_Feat(resnet_type=cnn_type1)
         self.feat2 = Resnet_Feat(resnet_type=cnn_type2)
-        self.com_bi_pool = CompactBilinearPooling(256*self.feat1.block_size*16*16,
-                256*self.feat2.block_size*16*16,
+        self.com_bi_pool = CompactBilinearPooling(512*self.feat1.block_size*8*8,
+                512*self.feat2.block_size*8*8,
                 bi_vector_dim)
+
+        # no head perform much better, converge much faster
         self.bi_vector_bn = nn.Sequential(
                 nn.BatchNorm1d(bi_vector_dim),
-                nn.Dropout(0.5),
-                nn.Linear(bi_vector_dim, 2048),
-                nn.ReLU(),
-                BatchNorm1d(2048),
+                # nn.Dropout(0.0),
+                # nn.Linear(bi_vector_dim, 2048),
+                # nn.ReLU(),
+                # BatchNorm1d(2048),
             )
         self.fc = nn.Linear(2048, num_classes)
 

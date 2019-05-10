@@ -36,8 +36,8 @@ class GLRPipeline(BasePipeline):
         self.stage_params = GLRPipelineParams(self.model).simple_cutoff()
 
     def init_model(self):
-        self.model = BCNN_CP_HP(num_classes=203100, bi_vector_dim= 8192,
-            cnn_type1='resnet34', cnn_type2='resnet34')
+        self.model = BCNN_CP_HP(num_classes=203100, bi_vector_dim= 2048,
+            cnn_type1='resnet50', cnn_type2='resnet34')
 
     def init_dataloader(self):
         self.dl=GLRDataLoader(self.train_df,

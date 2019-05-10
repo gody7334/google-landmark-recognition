@@ -120,7 +120,6 @@ class GLRBot(BaseBot):
         confs = ValueBuffer()
         preds = ValueBuffer()
         targs = ValueBuffer()
-
         self.logger.info("start eval, plz wait...")
 
         with torch.set_grad_enabled(False):
