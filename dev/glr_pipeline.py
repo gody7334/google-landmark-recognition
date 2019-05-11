@@ -26,18 +26,23 @@ from dev.data import GLRDataLoader
 from dev.glr_bot import GLRBot
 from utils.model import *
 from utils.pipeline import BasePipeline
-from dev.bcnn import BCNN, BCNN_CP, BCNN_MP, BCNN_CP_HP, BCNN_HP
+from dev.bcnn import *
 
 class GLRPipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def init_pipeline_params(self):
-        self.stage_params = GLRPipelineParams(self.model).simple_cutoff()
+        # self.stage_params = GLRPipelineParams(self.model).simple_cutoff()
+        pass
 
     def init_model(self):
-        self.model = BCNN_CP_HP(num_classes=203100, bi_vector_dim= 2048,
-            cnn_type1='resnet50', cnn_type2='resnet34')
+        self.model = sBCNN_CP_HP(
+                num_classes=203100,
+                bi_vector_dim= 2048,
+                cnn_type1='resnet50',
+                # cnn_type2='resnet34',
+                )
 
     def init_dataloader(self):
         self.dl=GLRDataLoader(self.train_df,
@@ -83,7 +88,7 @@ class GLRPipeline(BasePipeline):
                     'optimizer_init':[
                         [
                             [{'params':self.model.feat1.parameters(),'lr':base_lr*0.1},
-                             {'params':self.model.feat2.parameters(),'lr':base_lr*0.1},
+                             # {'params':self.model.feat2.parameters(),'lr':base_lr*0.1},
                              {'params':self.model.com_bi_pool.parameters(),'lr':base_lr},
                              {'params':self.model.fc.parameters(),'lr':base_lr, 'eps':1e-5},]
                         ],
